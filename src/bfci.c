@@ -24,20 +24,20 @@ char *bfci_compile(const char *src)
 	                                               "#define I ++*p;\n"          // increment
 	                                               "#define D --*p;\n"          // decrement
 	                                               "#define L --p;\n"           // left
-	                                               "#define R d(c,p,&s);++p;\n" // right
+	                                               "#define R d(&c,&p,&s);++p;\n" // right
 	                                               "#define O putchar(*p);\n"   // output
 	                                               "#define G *p=getchar();\n"  // get
 	                                               "#define S while(*p){\n"     // start (loop)
 	                                               "#define E }\n"              // end (loop)
 	                                               ""
-	                                               "void d(uint8_t*c,uint8_t*p,size_t*s)" // double cells size if needed
+	                                               "void d(uint8_t**c,uint8_t**p,size_t*s)" // double cells size if needed
 	                                               "{"
-	                                                "if(p-c==*s-1){"
-	                                                 "p-=(uintptr_t)c;"
-	                                                 "c=realloc(c,*s*2);"
-	                                                 "memset(c+*s,0,*s-1);"
+	                                                "if(*p-*c==*s-1){"
+	                                                 "*p-=(uintptr_t)*c;"
+	                                                 "*c=realloc(*c,*s*2);"
+	                                                 "memset(*c+*s,0,*s-1);"
 	                                                 "*s*=2;"
-	                                                 "p+=(uintptr_t)c;"
+	                                                 "*p+=(uintptr_t)*c;"
 	                                                "}"
 	                                                "++p;"
 	                                               "}"
