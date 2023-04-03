@@ -1,0 +1,7 @@
+.idea/
+.vscode/
+compile_flags.txt
+build/
+*.o
+*.so
+*.gch
