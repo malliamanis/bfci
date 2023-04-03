@@ -6,6 +6,8 @@
 
 #include "bfci.h"
 
+// TODO: add assembly support
+
 static char *load_file(const char *name);
 static void write_file(const char *name, const char *src);
 
@@ -48,17 +50,21 @@ int main(int argc, char **argv)
 				int32_t extension_index;
 				for (extension_index = file_len; extension_index != -1 && file[extension_index] != '.'; --extension_index);
 
+				int32_t path_index;
+				for (path_index = file_len; path_index != -1 && file[path_index] != '/'; --path_index);
+				++path_index;
+
 				char *out_name = NULL;
 
 				if (extension_index == -1) {
-					out_name = malloc(file_len + 2 + 1);
-					strcpy(out_name, file);
+					out_name = malloc(file_len - path_index + 2 + 1);
+					strcpy(out_name, file + path_index);
 					sprintf(out_name + file_len, ".c");
 				}
 				else {
-					out_name = malloc(file_len + 1);
-					strcpy(out_name, file);
-					sprintf(out_name + extension_index, ".c");
+					out_name = malloc(file_len - path_index + 1);
+					strcpy(out_name, file + path_index);
+					sprintf(out_name + extension_index - path_index, ".c");
 				}
 
 				write_file(out_name, compiled);
