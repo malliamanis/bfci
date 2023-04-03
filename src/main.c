@@ -61,10 +61,8 @@ int main(int argc, char **argv)
 					sprintf(out_name + extension_index, ".c");
 				}
 
-
-				puts(out_name);
-				// write_file(out_name, compiled);
-				// free(compiled);
+				write_file(out_name, compiled);
+				free(compiled);
 				free(out_name);
 			}
 			else
@@ -100,7 +98,7 @@ static char *load_file(const char *name)
 static void write_file(const char *name, const char *src)
 {
 	FILE *file = fopen(name, "w+");
-	fwrite(name, sizeof(char), strlen(src), file);
+	fwrite(src, sizeof(char), strlen(src), file);
 	fclose(file);
 }
 
