@@ -6,9 +6,7 @@
 
 #include "bfci.h"
 
-// TODO: add assembly support
-
-static char *load_file(const char *name);
+static char *read_file(const char *name);
 static void write_file(const char *name, const char *src);
 
 static void print_help(void);
@@ -20,68 +18,87 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	bool compile = false;
+	bool compile_c = false;
+	bool compile_asm = false;
 
-	for (uint32_t i = 1; i < argc; ++i) {
-		if (argv[i][0] == '-') {
-			switch (argv[i][1]) {
-				case 'h':
-					print_help();
-					return 1;
-					break;
-				case 'c':
-					compile = true;
-					break;
-				default:
-					fprintf(stderr, "error: invalid option \'-%c\'", argv[i][1]);
-					return 1;
-					break;
+	uint32_t i;
+	for (i = 1; i < argc; ++i) {
+		const char *arg = argv[i];
+		if (arg[0] == '-') {
+			if (arg[1] == 'h') {
+				print_help();
+				return 1;
+			}
+			else if (arg[1] == 'c') {
+				compile_c = true;
+			}
+			else if (arg[1] == 'a' && arg[2] == 's' && arg[3] == 'm') {
+				compile_asm = true;
 			}
 		}
-		else {
-			char *src = load_file(argv[i]);
+		else
+			break;
+	}
 
-			if (compile) {
-				const char *file = argv[i];
-				uint32_t file_len = strlen(file);
+	if (compile_c && compile_asm) {
+		fprintf(stderr, "error: can't have both the \'-c\' and \'-asm\' options at once\n");
+		return 1;
+	}
+	else if (i == argc) {
+		fprintf(stderr, "error: no input files\n");
+		return 1;
+	}
 
-				char *compiled = bfci_compile(src);
-				
-				int32_t extension_index;
-				for (extension_index = file_len; extension_index != -1 && file[extension_index] != '.'; --extension_index);
+	for (; i < argc; ++i) {
+		char *src = read_file(argv[i]);
 
-				int32_t path_index;
-				for (path_index = file_len; path_index != -1 && file[path_index] != '/'; --path_index);
-				++path_index;
+		if (compile_c || compile_asm) {
+			const char *file_name = argv[i];
+			uint32_t file_name_len = strlen(file_name);
 
-				char *out_name = NULL;
+			int32_t extension_index;
+			for (extension_index = file_name_len - 1; extension_index != -1 && file_name[extension_index] != '.'; --extension_index);
 
-				if (extension_index == -1) {
-					out_name = malloc(file_len - path_index + 2 + 1);
-					strcpy(out_name, file + path_index);
-					sprintf(out_name + file_len, ".c");
-				}
-				else {
-					out_name = malloc(file_len - path_index + 1);
-					strcpy(out_name, file + path_index);
-					sprintf(out_name + extension_index - path_index, ".c");
-				}
+			int32_t path_index;
+			for (path_index = file_name_len - 1; path_index != -1 && file_name[path_index] != '/'; --path_index);
+			++path_index;
 
-				write_file(out_name, compiled);
-				free(compiled);
-				free(out_name);
+			char *compiled = NULL;
+			uint32_t out_name_offset; // for the sprintf offset
+			const char *extension_str = NULL;
+
+			if (compile_c) {
+				compiled = bfci_compile_c(src);
+				extension_str = ".c";
 			}
+			else if (compile_asm) {
+				compiled = bfci_compile_asm(src);
+				extension_str = ".asm";
+			}
+
+			if (extension_index == -1)
+				out_name_offset = file_name_len - 1;
 			else
-				bfci_interpret(src);	
-			
-			free(src);
+				out_name_offset = extension_index - path_index;
+
+			char *out_name = malloc(file_name_len - path_index + strlen(extension_str) + 1);
+			strcpy(out_name, file_name + path_index);
+			sprintf(out_name + out_name_offset, "%s", extension_str);
+
+			write_file(out_name, compiled);
+			free(out_name);
+			free(compiled);
 		}
+		else
+			bfci_interpret(src);	
+		
+		free(src);
 	}
 
 	return 0;
 }
 
-static char *load_file(const char *name)
+static char *read_file(const char *name)
 {
 	FILE *file = fopen(name, "r");
 	if (file == NULL) {
@@ -104,14 +121,20 @@ static char *load_file(const char *name)
 static void write_file(const char *name, const char *src)
 {
 	FILE *file = fopen(name, "w+");
+	if (file == NULL) {
+		fprintf(stderr, "error: %s: cannot write to file\n", name);
+	}
+
 	fwrite(src, sizeof(char), strlen(src), file);
+
 	fclose(file);
 }
 
 static void print_help(void)
 {
-	printf("Usage: bfci [options] files...\n");
-	printf("Options:\n");
-	printf("  -h help\n");
-	printf("  -c compile instead of interpreting\n");
+	printf("Usage: bfci [options] files...\n"
+	       "Options:\n"
+	       "  -h   help\n"
+	       "  -c   compile to C\n"
+		   "  -asm compile to Linux x86_64 Assembly\n");
 }

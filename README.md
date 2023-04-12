@@ -4,9 +4,6 @@ Brainfuck Compiler and Interpreter
 ---
 
 ## How to build
-```
-$ git clone https://github.com/theverdik/bfci.git
-```
 for debug
 ```
 $ make

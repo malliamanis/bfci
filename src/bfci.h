@@ -1,7 +1,10 @@
 #ifndef BFCI_H
 #define BFCI_H
 
-char *bfci_compile(const char *src); // returns a heap allocated string
+// both return a heap allocated string
+char *bfci_compile_c(const char *src);
+char *bfci_compile_asm(const char *src);
+
 void bfci_interpret(const char *src);
 
 #endif // BFCI_H
