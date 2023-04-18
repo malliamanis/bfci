@@ -18,6 +18,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	bool interpret = false;
 	bool compile_c = false;
 	bool compile_asm = false;
 
@@ -29,19 +30,42 @@ int main(int argc, char **argv)
 				print_help();
 				return 1;
 			}
+			else if (arg[1] == 'i') {
+				if (interpret) {
+					fprintf(stderr, "error: can't have the '-i' flag more than once\n");
+					return 1;
+				}
+				interpret = true;
+			}
 			else if (arg[1] == 'c') {
+				if (compile_c) {
+					fprintf(stderr, "error: can't have the '-c' flag more than once\n");
+					return 1;
+				}
 				compile_c = true;
 			}
 			else if (arg[1] == 'a' && arg[2] == 's' && arg[3] == 'm') {
+				if (compile_asm) {
+					fprintf(stderr, "error: can't have the '-asm' flag more than once\n");
+					return 1;
+				}
 				compile_asm = true;
+			}
+			else {
+				fprintf(stderr, "error: invalid flag '-%c'\nUse -h for help\n", arg[0]);
+				return 1;
 			}
 		}
 		else
 			break;
 	}
 
-	if (compile_c && compile_asm) {
-		fprintf(stderr, "error: can't have both the \'-c\' and \'-asm\' options at once\n");
+	if ((interpret && compile_c) || (interpret && compile_asm)) {
+		fprintf(stderr, "error: can't have both the '-i' flag and a compilation flag at once\n");
+		return 1;
+	}
+	else if (compile_c && compile_asm) {
+		fprintf(stderr, "error: can't have both the '-c' and '-asm' options at once\n");
 		return 1;
 	}
 	else if (i == argc) {
@@ -52,45 +76,44 @@ int main(int argc, char **argv)
 	for (; i < argc; ++i) {
 		char *src = read_file(argv[i]);
 
-		if (compile_c || compile_asm) {
-			const char *file_name = argv[i];
-			uint32_t file_name_len = strlen(file_name);
-
-			int32_t extension_index;
-			for (extension_index = file_name_len - 1; extension_index != -1 && file_name[extension_index] != '.'; --extension_index);
-
-			int32_t path_index;
-			for (path_index = file_name_len - 1; path_index != -1 && file_name[path_index] != '/'; --path_index);
-			++path_index;
-
-			char *compiled = NULL;
-			uint32_t out_name_offset; // for the sprintf offset
-			const char *extension_str = NULL;
-
-			if (compile_c) {
-				compiled = bfci_compile_c(src);
-				extension_str = ".c";
-			}
-			else if (compile_asm) {
-				compiled = bfci_compile_asm(src);
-				extension_str = ".asm";
-			}
-
-			if (extension_index == -1)
-				out_name_offset = file_name_len - 1;
-			else
-				out_name_offset = extension_index - path_index;
-
-			char *out_name = malloc(file_name_len - path_index + strlen(extension_str) + 1);
-			strcpy(out_name, file_name + path_index);
-			sprintf(out_name + out_name_offset, "%s", extension_str);
-
-			write_file(out_name, compiled);
-			free(out_name);
-			free(compiled);
-		}
-		else
+		if (!(compile_c || compile_asm)) {
 			bfci_interpret(src);	
+			continue;
+		}
+
+		const char *file_name = argv[i];
+		uint32_t file_name_len = strlen(file_name);
+
+		int32_t extension_index; for (extension_index = file_name_len - 1; extension_index != -1 && file_name[extension_index] != '.'; --extension_index);
+		int32_t path_index;
+		for (path_index = file_name_len - 1; path_index != -1 && file_name[path_index] != '/'; --path_index);
+		++path_index;
+
+		char *compiled = NULL;
+		uint32_t out_name_offset; // for the sprintf offset
+		const char *extension_str = NULL;
+
+		if (compile_c) {
+			compiled = bfci_compile_c(src);
+			extension_str = ".c";
+		}
+		else if (compile_asm) {
+			compiled = bfci_compile_asm(src);
+			extension_str = ".asm";
+		}
+
+		if (extension_index == -1)
+			out_name_offset = file_name_len - 1;
+		else
+			out_name_offset = extension_index - path_index;
+
+		char *out_name = malloc(file_name_len - path_index + strlen(extension_str) + 1);
+		strcpy(out_name, file_name + path_index);
+		sprintf(out_name + out_name_offset, "%s", extension_str);
+
+		write_file(out_name, compiled);
+		free(out_name);
+		free(compiled);
 		
 		free(src);
 	}
@@ -135,6 +158,7 @@ static void print_help(void)
 	printf("Usage: bfci [options] files...\n"
 	       "Options:\n"
 	       "  -h   help\n"
+	       "  -i   interpret\n"
 	       "  -c   compile to C\n"
 		   "  -asm compile to Linux x86_64 Assembly\n");
 }

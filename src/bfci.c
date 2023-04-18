@@ -26,7 +26,7 @@ char *bfci_compile_c(const char *src)
 	                                               "#define L --p;\n"           // left
 	                                               "#define R d(&c,&p,&s);++p;\n" // right
 	                                               "#define O putchar(*p);\n"   // output
-	                                               "#define G *p=getchar();\n"  // get
+	                                               "#define I *p=getchar();\n"  // get
 	                                               "#define S while(*p){\n"     // start (loop)
 	                                               "#define E }\n"              // end (loop)
 	                                               ""
@@ -66,7 +66,7 @@ char *bfci_compile_c(const char *src)
 				output = add_instruction(output, &output_size, "O ");
 				break;
 			case ',':
-				output = add_instruction(output, &output_size, "G ");
+				output = add_instruction(output, &output_size, "I ");
 				break;
 			case '[':
 				output = add_instruction(output, &output_size, "S ");
@@ -92,7 +92,10 @@ char *bfci_compile_asm(const char *src)
 	char *output = calloc(output_size, sizeof(char));
 
 	uint32_t loop_counter = 1;
-	uint32_t loop_stack[1024] = {0};
+
+	size_t loop_stack_size = 16;
+	uint32_t *loop_stack = calloc(loop_stack_size, sizeof(uint32_t));
+
 	int32_t stack_top = 0;
 
 	char startstr[10] = {0};
@@ -104,7 +107,7 @@ char *bfci_compile_asm(const char *src)
 	                                               "section .bss\n"
 	                                               "cells: resq 1\n"
 	                                               "pointer: resq 1\n"
-	                                               "size: resd 1\n"
+	                                               "size: resq 1\n"
 	                                               ""
 	                                               "section .text\n"
 	                                               "brk:\n"
@@ -121,19 +124,19 @@ char *bfci_compile_asm(const char *src)
 	                                               " cmp rax, rbx\n"
 	                                               ""
 	                                               " jne ENDIF\n"
-	                                               " lea ecx, [size]\n"
-	                                               " mov edi, [ecx]\n"
-	                                               " shl edi, 2\n"
+	                                               " lea rcx, [size]\n"
+	                                               " mov rdi, [ecx]\n"
+	                                               " shl rdi, 2\n"
 	                                               " call brk\n"
 	                                               ""
 	                                               " mov rdx, [cells]\n"
-	                                               " add rbx, rcx\n"
+	                                               " add rdx, qword [rcx]\n"
 	                                               " xor eax, eax\n"
 	                                               " mov rdi, [rcx]\n"
 	                                               " dec rdi\n"
 	                                               " rep stosb\n"
 	                                               ""
-	                                               " shl dword [ecx], 2\n"
+	                                               " shl qword [rcx], 2\n"
 	                                               " ENDIF:\n"
 	                                               " ret\n"
 	                                               ""
@@ -162,11 +165,12 @@ char *bfci_compile_asm(const char *src)
 	                                               " mov [cells], rax\n"
 	                                               " mov [pointer], rax\n"
 	                                               " mov rdi, rax\n"
-	                                               " mov [size], dword 0x10\n"
+	                                               " mov [size], dword 0x1000\n"
 	                                               " mov eax, [size]\n"
 	                                               " add rdi, rax\n"
 	                                               " call brk\n");
 
+	// TODO: fix memory doubling bug
 	while ((current = src[index++]) != 0) {
 		switch (current) {
 			case '+':
@@ -182,14 +186,21 @@ char *bfci_compile_asm(const char *src)
 				break;
 			case '>':
 				output = add_instruction(output, &output_size, " inc qword [pointer]\n");
+				// output = add_instruction(output, &output_size, " call D\n");
 				break;
 			case '.':
 				output = add_instruction(output, &output_size, " call O\n");
 				break;
 			case ',':
-				output = add_instruction(output, &output_size, " call G\n");
+				output = add_instruction(output, &output_size, " call I\n");
 				break;
 			case '[':
+				if (stack_top == loop_stack_size) {
+					loop_stack = realloc(loop_stack, loop_stack_size * 2);
+					memset(loop_stack + loop_stack_size, 0, loop_stack_size);
+					loop_stack_size *= 2;
+				}
+
 				loop_stack[stack_top++] = loop_counter; // push
 
 				sprintf(startstr, "L%u:\n", loop_counter);
@@ -251,7 +262,7 @@ void bfci_interpret(const char *src)
 	int32_t src_index = 0;
 	uint32_t loop_depth = 0;
 
-	size_t cells_size = 100;
+	size_t cells_size = 128;
 	uint8_t *cells = calloc(cells_size, sizeof(uint8_t));
 	uint8_t *ptr = cells;
 
@@ -265,7 +276,7 @@ void bfci_interpret(const char *src)
 				break;
 			case '<':
 				if (ptr - cells == 0) {
-					fputs("error: data pointer out of range\n", stderr);
+					fprintf(stderr, "error: data pointer out of range\n");
 					exit(EXIT_FAILURE);
 				}
 
@@ -276,7 +287,7 @@ void bfci_interpret(const char *src)
 					ptr -= (uintptr_t)cells;
 
 					cells = realloc(cells, cells_size * 2);
-					memset(cells + cells_size, 0, cells_size - 1);
+					memset(cells + cells_size, 0, cells_size);
 					cells_size *= 2;
 
 					ptr += (uintptr_t)cells;
