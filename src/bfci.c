@@ -5,80 +5,90 @@
 
 #include "bfci.h"
 
-static char *add_instruction(char *dest, size_t *dest_size, const char *src);
+static void add_instruction(char **dest, size_t *dest_size, const char *src);
 
 char *bfci_compile_c(const char *src)
 {
 	char current;
 	uint32_t index = 0;
 
-	size_t output_size = 512;
+	size_t output_size = 64;
 	char *output = calloc(output_size, sizeof(char));
 
-	output = add_instruction(output, &output_size, "#include<stdio.h>\n"
-	                                               "#include<stdlib.h>\n"
-	                                               "#include<stdint.h>\n"
-	                                               "#include<string.h>\n"
-	                                               ""
-	                                               // macros to reduce file size
-	                                               "#define I ++*p;\n"          // increment
-	                                               "#define D --*p;\n"          // decrement
-	                                               "#define L --p;\n"           // left
-	                                               "#define R d(&c,&p,&s);++p;\n" // right
-	                                               "#define O putchar(*p);\n"   // output
-	                                               "#define I *p=getchar();\n"  // get
-	                                               "#define S while(*p){\n"     // start (loop)
-	                                               "#define E }\n"              // end (loop)
-	                                               ""
-	                                               "void d(uint8_t**c,uint8_t**p,size_t*s)" // double cells size if needed
-	                                               "{"
-	                                                "if(*p-*c==*s-1){"
-	                                                 "*p-=(uintptr_t)*c;"
-	                                                 "*c=realloc(*c,*s*2);"
-	                                                 "memset(*c+*s,0,*s-1);"
-	                                                 "*s*=2;"
-	                                                 "*p+=(uintptr_t)*c;"
-	                                                "}"
-	                                                "++p;"
-	                                               "}"
-	                                               ""
-	                                               "int main(void)"
-	                                               "{"
-	                                                "size_t s=256;"                              // cells size
-	                                                "uint8_t*c=calloc(s,sizeof(unsigned char));" // cells
-	                                                "uint8_t*p=c;");                             // data pointer
+	char indentation[50] = {0};
+	uint32_t indentation_last = 0;
+
+	add_instruction(&output, &output_size, "#include <stdio.h>\n"
+	                                               "#include <stdlib.h>\n"
+	                                               "#include <stdint.h>\n"
+	                                               "#include <string.h>\n"
+	                                               "\n"
+	                                               "void double_size(uint8_t **cells, uint8_t **ptr, size_t *size)\n"
+	                                               "{\n"
+	                                               "\tif (*ptr - *cells == *size - 1) {\n"
+	                                               "\t\t*ptr -= (uintptr_t)(*cells);\n"
+	                                               "\t\t*cells = realloc(*cells, *size * 2);\n"
+	                                               "\t\tmemset(*cells + *size, 0, *size);\n"
+	                                               "\t\t*size *= 2;\n"
+	                                               "\t\t*ptr += (uintptr_t)(*cells);\n"
+	                                               "\t}\n"
+	                                               "\t++ptr;\n"
+	                                               "}\n"
+	                                               "\n"
+	                                               "int main(void)\n"
+	                                               "{\n"
+	                                               "\tsize_t size = 128;\n"
+	                                               "\tuint8_t *cells = calloc(size, sizeof(uint8_t));\n"
+	                                               "\tuint8_t *ptr = cells;\n");
 
 	while ((current = src[index++]) != 0) {
 		switch (current) {
 			case '+':
-				output = add_instruction(output, &output_size, "I ");
+				add_instruction(&output, &output_size, indentation);
+				add_instruction(&output, &output_size, "\t++(*ptr);\n");
 				break;
 			case '-':
-				output = add_instruction(output, &output_size, "D ");
+				add_instruction(&output, &output_size, indentation);
+				add_instruction(&output, &output_size, "\t--(*ptr);\n");
 				break;
 			case '<':
-				output = add_instruction(output, &output_size, "L ");
+				add_instruction(&output, &output_size, indentation);
+				add_instruction(&output, &output_size, "\t--ptr;\n");
 				break;
 			case '>':
-				output = add_instruction(output, &output_size, "R ");
+				add_instruction(&output, &output_size, indentation);
+				add_instruction(&output, &output_size, "\tdouble_size(&cells, &ptr, &size);\n");
+
+				add_instruction(&output, &output_size, indentation);
+				add_instruction(&output, &output_size, "\t++ptr;\n");
 				break;
 			case '.':
-				output = add_instruction(output, &output_size, "O ");
+				add_instruction(&output, &output_size, indentation);
+				add_instruction(&output, &output_size, "\tputchar(*ptr);\n");
 				break;
 			case ',':
-				output = add_instruction(output, &output_size, "I ");
+				add_instruction(&output, &output_size, indentation);
+				add_instruction(&output, &output_size, "\t*ptr = getchar();\n");
 				break;
 			case '[':
-				output = add_instruction(output, &output_size, "S ");
+				add_instruction(&output, &output_size, indentation);
+				add_instruction(&output, &output_size, "\twhile (*ptr) {\n");
+
+				indentation[indentation_last++] = '\t';
 				break;
 			case ']':
-				output = add_instruction(output, &output_size, "E ");
+				indentation[--indentation_last] = 0;
+
+				add_instruction(&output, &output_size, indentation);
+				add_instruction(&output, &output_size, "\t}\n");
+				break;
+			default:
 				break;
 		}
 	}
 	
-	output = add_instruction(output, &output_size,  "free(c);"
-	                                               "}\n");
+	add_instruction(&output, &output_size, "\n\tfree(cells);\n"
+	                                       "}\n");
 
 	return output;
 }
@@ -98,10 +108,10 @@ char *bfci_compile_asm(const char *src)
 
 	int32_t stack_top = 0;
 
-	char startstr[10] = {0};
-	char endstr[10] = {0};
+	char startstr[16] = {0};
+	char endstr[16] = {0};
 
-	output = add_instruction(output, &output_size, "default rel\n"
+	add_instruction(&output, &output_size, "default rel\n"
 	                                               "global _start\n"
 	                                               ""
 	                                               "section .bss\n"
@@ -115,7 +125,7 @@ char *bfci_compile_asm(const char *src)
 	                                               " syscall\n"
 	                                               " ret\n"
 	                                               ""
-	                                               "D:\n"
+	                                               "D:\n" // double memory size if needed
 	                                               " mov rax, [pointer]\n"
 	                                               " mov rcx, [cells]\n"
 	                                               " sub rax, rcx\n"
@@ -140,7 +150,7 @@ char *bfci_compile_asm(const char *src)
 	                                               " ENDIF:\n"
 	                                               " ret\n"
 	                                               ""
-	                                               "O:\n"
+	                                               "O:\n" // output a byte
 	                                               " mov eax, 1\n"
 	                                               " mov edi, 1\n"
 	                                               " mov rsi, [pointer]\n"
@@ -148,7 +158,7 @@ char *bfci_compile_asm(const char *src)
 	                                               " syscall\n"
 	                                               " ret\n"
 	                                               ""
-	                                               "I:\n"
+	                                               "G:\n" // get a byte from the user
 	                                               " xor eax, eax\n"
 	                                               " xor edi, edi\n"
 	                                               " mov rsi, [pointer]\n"
@@ -165,7 +175,7 @@ char *bfci_compile_asm(const char *src)
 	                                               " mov [cells], rax\n"
 	                                               " mov [pointer], rax\n"
 	                                               " mov rdi, rax\n"
-	                                               " mov [size], dword 0x1000\n"
+	                                               " mov [size], dword 0x10000\n"
 	                                               " mov eax, [size]\n"
 	                                               " add rdi, rax\n"
 	                                               " call brk\n");
@@ -174,25 +184,25 @@ char *bfci_compile_asm(const char *src)
 	while ((current = src[index++]) != 0) {
 		switch (current) {
 			case '+':
-				output = add_instruction(output, &output_size, " mov rax, [pointer]\n"
+				add_instruction(&output, &output_size, " mov rax, [pointer]\n"
 				                                               " inc byte [rax]\n");
 				break;
 			case '-':
-				output = add_instruction(output, &output_size, " mov rax, [pointer]\n"
+				add_instruction(&output, &output_size, " mov rax, [pointer]\n"
 				                                               " dec byte [rax]\n");
 				break;
 			case '<':
-				output = add_instruction(output, &output_size, " dec qword [pointer]\n");
+				add_instruction(&output, &output_size, " dec qword [pointer]\n");
 				break;
 			case '>':
-				output = add_instruction(output, &output_size, " inc qword [pointer]\n");
-				// output = add_instruction(output, &output_size, " call D\n");
+				add_instruction(&output, &output_size, " inc qword [pointer]\n");
+				// add_instruction(&output, &output_size, " call D\n");
 				break;
 			case '.':
-				output = add_instruction(output, &output_size, " call O\n");
+				add_instruction(&output, &output_size, " call O\n");
 				break;
 			case ',':
-				output = add_instruction(output, &output_size, " call I\n");
+				add_instruction(&output, &output_size, " call G\n");
 				break;
 			case '[':
 				if (stack_top == loop_stack_size) {
@@ -208,11 +218,11 @@ char *bfci_compile_asm(const char *src)
 
 				++loop_counter;
 
-				output = add_instruction(output, &output_size, startstr);
-				output = add_instruction(output, &output_size, " mov rax, [pointer]\n"
+				add_instruction(&output, &output_size, startstr);
+				add_instruction(&output, &output_size, " mov rax, [pointer]\n"
 				                                               " cmp byte [rax], 0\n"
 				                                               " je ");
-				output = add_instruction(output, &output_size, endstr);
+				add_instruction(&output, &output_size, endstr);
 
 				break;
 			case ']':
@@ -220,17 +230,17 @@ char *bfci_compile_asm(const char *src)
 				sprintf(startstr, "L%u\n", loop_stack[stack_top - 1]);
 				--stack_top; // pop
 
-				output = add_instruction(output, &output_size, endstr);
-				output = add_instruction(output, &output_size, " mov rax, [pointer]\n"
+				add_instruction(&output, &output_size, endstr);
+				add_instruction(&output, &output_size, " mov rax, [pointer]\n"
 				                                               " cmp byte [rax], 0\n"
 				                                               " jne ");
-				output = add_instruction(output, &output_size, startstr);
+				add_instruction(&output, &output_size, startstr);
 
 				break;
 		}
 	}
 	
-	output = add_instruction(output, &output_size, " mov rax, [cells]\n"
+	add_instruction(&output, &output_size, " mov rax, [cells]\n"
 	                                               " call brk\n"
 	                                               ""
 	                                               " pop rbp\n"
@@ -242,18 +252,14 @@ char *bfci_compile_asm(const char *src)
 	return output;
 }
 
-static char *add_instruction(char *dest, size_t *dest_size, const char *src)
+static void add_instruction(char **dest, size_t *dest_size, const char *src)
 {
-	if (strlen(dest) + 1 + strlen(src) >= *dest_size) {
+	if (strlen(*dest) + 1 + strlen(src) >= *dest_size) {
 		size_t src_length = strlen(src);
-		dest = realloc(dest, *dest_size * 2 + src_length + 1);
-		memset(dest + *dest_size, 0, *dest_size + src_length + 1);
-		*dest_size = *dest_size * 2 + src_length + 1;
+		*dest = realloc(*dest, (*dest_size *= 2) + src_length + 1);
 	}
 
-	strcat(dest, src);
-
-	return dest;
+	strcat(*dest, src);
 }
 
 void bfci_interpret(const char *src)
