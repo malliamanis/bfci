@@ -19,27 +19,27 @@ char *bfci_compile_c(const char *src)
 	uint32_t indentation_last = 0;
 
 	add_instruction(&output, &output_size, "#include <stdio.h>\n"
-	                                               "#include <stdlib.h>\n"
-	                                               "#include <stdint.h>\n"
-	                                               "#include <string.h>\n"
-	                                               "\n"
-	                                               "void double_size(uint8_t **cells, uint8_t **ptr, size_t *size)\n"
-	                                               "{\n"
-	                                               "\tif (*ptr - *cells == *size - 1) {\n"
-	                                               "\t\t*ptr -= (uintptr_t)(*cells);\n"
-	                                               "\t\t*cells = realloc(*cells, *size * 2);\n"
-	                                               "\t\tmemset(*cells + *size, 0, *size);\n"
-	                                               "\t\t*size *= 2;\n"
-	                                               "\t\t*ptr += (uintptr_t)(*cells);\n"
-	                                               "\t}\n"
-	                                               "\t++ptr;\n"
-	                                               "}\n"
-	                                               "\n"
-	                                               "int main(void)\n"
-	                                               "{\n"
-	                                               "\tsize_t size = 128;\n"
-	                                               "\tuint8_t *cells = calloc(size, sizeof(uint8_t));\n"
-	                                               "\tuint8_t *ptr = cells;\n");
+	                                       "#include <stdlib.h>\n"
+	                                       "#include <stdint.h>\n"
+	                                       "#include <string.h>\n"
+	                                       "\n"
+	                                       "void double_size(uint8_t **cells, uint8_t **ptr, size_t *size)\n"
+	                                       "{\n"
+	                                       "\tif (*ptr - *cells == *size - 1) {\n"
+	                                       "\t\t*ptr -= (uintptr_t)(*cells);\n"
+	                                       "\t\t*cells = realloc(*cells, *size * 2);\n"
+	                                       "\t\tmemset(*cells + *size, 0, *size);\n"
+	                                       "\t\t*size *= 2;\n"
+	                                       "\t\t*ptr += (uintptr_t)(*cells);\n"
+	                                       "\t}\n"
+	                                       "\t++ptr;\n"
+	                                       "}\n"
+	                                       "\n"
+	                                       "int main(void)\n"
+	                                       "{\n"
+	                                       "\tsize_t size = 128;\n"
+	                                       "\tuint8_t *cells = calloc(size, sizeof(uint8_t));\n"
+	                                       "\tuint8_t *ptr = cells;\n");
 
 	while ((current = src[index++]) != 0) {
 		switch (current) {
@@ -112,84 +112,84 @@ char *bfci_compile_asm(const char *src)
 	char endstr[16] = {0};
 
 	add_instruction(&output, &output_size, "default rel\n"
-	                                               "global _start\n"
-	                                               ""
-	                                               "section .bss\n"
-	                                               "cells: resq 1\n"
-	                                               "pointer: resq 1\n"
-	                                               "size: resq 1\n"
-	                                               ""
-	                                               "section .text\n"
-	                                               "brk:\n"
-	                                               " mov eax, 12\n"
-	                                               " syscall\n"
-	                                               " ret\n"
-	                                               ""
-	                                               "D:\n" // double memory size if needed
-	                                               " mov rax, [pointer]\n"
-	                                               " mov rcx, [cells]\n"
-	                                               " sub rax, rcx\n"
-	                                               " mov rbx, [size]\n"
-	                                               " dec rbx\n"
-	                                               " cmp rax, rbx\n"
-	                                               ""
-	                                               " jne ENDIF\n"
-	                                               " lea rcx, [size]\n"
-	                                               " mov rdi, [ecx]\n"
-	                                               " shl rdi, 2\n"
-	                                               " call brk\n"
-	                                               ""
-	                                               " mov rdx, [cells]\n"
-	                                               " add rdx, qword [rcx]\n"
-	                                               " xor eax, eax\n"
-	                                               " mov rdi, [rcx]\n"
-	                                               " dec rdi\n"
-	                                               " rep stosb\n"
-	                                               ""
-	                                               " shl qword [rcx], 2\n"
-	                                               " ENDIF:\n"
-	                                               " ret\n"
-	                                               ""
-	                                               "O:\n" // output a byte
-	                                               " mov eax, 1\n"
-	                                               " mov edi, 1\n"
-	                                               " mov rsi, [pointer]\n"
-	                                               " mov edx, 1\n"
-	                                               " syscall\n"
-	                                               " ret\n"
-	                                               ""
-	                                               "G:\n" // get a byte from the user
-	                                               " xor eax, eax\n"
-	                                               " xor edi, edi\n"
-	                                               " mov rsi, [pointer]\n"
-	                                               " mov edx, 1\n"
-	                                               " syscall\n"
-	                                               " ret\n"
-	                                               ""
-	                                               "_start:\n"
-	                                               " push rbp\n"
-	                                               " mov rbp, rsp\n"
-	                                               ""
-	                                               " xor edi, edi\n"
-	                                               " call brk\n"
-	                                               " mov [cells], rax\n"
-	                                               " mov [pointer], rax\n"
-	                                               " mov rdi, rax\n"
-	                                               " mov [size], dword 0x10000\n"
-	                                               " mov eax, [size]\n"
-	                                               " add rdi, rax\n"
-	                                               " call brk\n");
+	                                       "global _start\n"
+	                                       ""
+	                                       "section .bss\n"
+	                                       "cells: resq 1\n"
+	                                       "pointer: resq 1\n"
+	                                       "size: resq 1\n"
+	                                       ""
+	                                       "section .text\n"
+	                                       "brk:\n"
+	                                       " mov eax, 12\n"
+	                                       " syscall\n"
+	                                       " ret\n"
+	                                       ""
+	                                       "D:\n" // double memory size if needed
+	                                       " mov rax, [pointer]\n"
+	                                       " mov rcx, [cells]\n"
+	                                       " sub rax, rcx\n"
+	                                       " mov rbx, [size]\n"
+	                                       " dec rbx\n"
+	                                       " cmp rax, rbx\n"
+	                                       ""
+	                                       " jne ENDIF\n"
+	                                       " lea rcx, [size]\n"
+	                                       " mov rdi, [ecx]\n"
+	                                       " shl rdi, 2\n"
+	                                       " call brk\n"
+	                                       ""
+	                                       " mov rdx, [cells]\n"
+	                                       " add rdx, qword [rcx]\n"
+	                                       " xor eax, eax\n"
+	                                       " mov rdi, [rcx]\n"
+	                                       " dec rdi\n"
+	                                       " rep stosb\n"
+	                                       ""
+	                                       " shl qword [rcx], 2\n"
+	                                       " ENDIF:\n"
+	                                       " ret\n"
+	                                       ""
+	                                       "O:\n" // output a byte
+	                                       " mov eax, 1\n"
+	                                       " mov edi, 1\n"
+	                                       " mov rsi, [pointer]\n"
+	                                       " mov edx, 1\n"
+	                                       " syscall\n"
+	                                       " ret\n"
+	                                       ""
+	                                       "G:\n" // get a byte from the user
+	                                       " xor eax, eax\n"
+	                                       " xor edi, edi\n"
+	                                       " mov rsi, [pointer]\n"
+	                                       " mov edx, 1\n"
+	                                       " syscall\n"
+	                                       " ret\n"
+	                                       ""
+	                                       "_start:\n"
+	                                       " push rbp\n"
+	                                       " mov rbp, rsp\n"
+	                                       ""
+	                                       " xor edi, edi\n"
+	                                       " call brk\n"
+	                                       " mov [cells], rax\n"
+	                                       " mov [pointer], rax\n"
+	                                       " mov rdi, rax\n"
+	                                       " mov [size], dword 0x10000\n"
+	                                       " mov eax, [size]\n"
+	                                       " add rdi, rax\n"
+	                                       " call brk\n");
 
 	// TODO: fix memory doubling bug
 	while ((current = src[index++]) != 0) {
 		switch (current) {
 			case '+':
 				add_instruction(&output, &output_size, " mov rax, [pointer]\n"
-				                                               " inc byte [rax]\n");
+				                                       " inc byte [rax]\n");
 				break;
 			case '-':
 				add_instruction(&output, &output_size, " mov rax, [pointer]\n"
-				                                               " dec byte [rax]\n");
+				                                       " dec byte [rax]\n");
 				break;
 			case '<':
 				add_instruction(&output, &output_size, " dec qword [pointer]\n");
@@ -220,8 +220,8 @@ char *bfci_compile_asm(const char *src)
 
 				add_instruction(&output, &output_size, startstr);
 				add_instruction(&output, &output_size, " mov rax, [pointer]\n"
-				                                               " cmp byte [rax], 0\n"
-				                                               " je ");
+				                                       " cmp byte [rax], 0\n"
+				                                       " je ");
 				add_instruction(&output, &output_size, endstr);
 
 				break;
@@ -232,8 +232,8 @@ char *bfci_compile_asm(const char *src)
 
 				add_instruction(&output, &output_size, endstr);
 				add_instruction(&output, &output_size, " mov rax, [pointer]\n"
-				                                               " cmp byte [rax], 0\n"
-				                                               " jne ");
+				                                       " cmp byte [rax], 0\n"
+				                                       " jne ");
 				add_instruction(&output, &output_size, startstr);
 
 				break;
@@ -241,13 +241,13 @@ char *bfci_compile_asm(const char *src)
 	}
 	
 	add_instruction(&output, &output_size, " mov rax, [cells]\n"
-	                                               " call brk\n"
-	                                               ""
-	                                               " pop rbp\n"
-	                                               ""
-	                                               " mov rax, 60\n"
-	                                               " mov rdi, 0\n"
-	                                               " syscall\n");
+	                                       " call brk\n"
+	                                       ""
+	                                       " pop rbp\n"
+	                                       ""
+	                                       " mov rax, 60\n"
+	                                       " mov rdi, 0\n"
+	                                       " syscall\n");
 
 	return output;
 }
