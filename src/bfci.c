@@ -256,7 +256,9 @@ static void add_instruction(char **dest, size_t *dest_size, const char *src)
 {
 	if (strlen(*dest) + 1 + strlen(src) >= *dest_size) {
 		size_t src_length = strlen(src);
-		*dest = realloc(*dest, (*dest_size *= 2) + src_length + 1);
+		*dest = realloc(*dest, *dest_size * 2 + src_length + 1);
+		*dest_size *= 2;
+		*dest_size += src_length + 1;
 	}
 
 	strcat(*dest, src);
