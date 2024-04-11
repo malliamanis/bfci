@@ -6,8 +6,10 @@
 
 #include "bfci.h"
 
-static char *read_file(const char *name);
-static void write_file(const char *name, const char *src);
+static char *file_read(const char *name);
+static void file_write(const char *name, const char *src);
+
+static char *file_name_gen(const char *file_name, const char *extension);
 
 static void print_help(void);
 
@@ -21,47 +23,46 @@ int main(int argc, char **argv)
 	bool interpret = false;
 	bool compile_c = false;
 	bool compile_asm = false;
+	bool dynamic = false;
 
-	uint32_t i;
+	int i;
 	for (i = 1; i < argc; ++i) {
 		const char *arg = argv[i];
-		if (arg[0] == '-') {
-			if (arg[1] == 'h') {
-				print_help();
-				return 1;
-			}
-			else if (arg[1] == 'i') {
-				if (interpret) {
-					fprintf(stderr, "error: can't have the '-i' flag more than once\n");
-					return 1;
-				}
-				interpret = true;
-			}
-			else if (arg[1] == 'c') {
-				if (compile_c) {
-					fprintf(stderr, "error: can't have the '-c' flag more than once\n");
-					return 1;
-				}
-				compile_c = true;
-			}
-			else if (arg[1] == 'a' && arg[2] == 's' && arg[3] == 'm') {
-				if (compile_asm) {
-					fprintf(stderr, "error: can't have the '-asm' flag more than once\n");
-					return 1;
-				}
-				compile_asm = true;
-			}
-			else {
-				fprintf(stderr, "error: invalid flag '-%c'\nUse -h for help\n", arg[0]);
-				return 1;
-			}
-		}
-		else
+		
+		// if it doesn't start with a dash it's a file
+		if (arg[0] != '-')
 			break;
+
+		if (strcmp(arg + 1, "int") == 0) {
+			interpret = true;
+			continue;
+		}
+		else if (strcmp(arg + 1, "asm") == 0) {
+			compile_asm = true;
+			continue;
+		}
+
+		switch (arg[1]) {
+			case 'h':
+				print_help();
+				return 0;
+			case 'c':
+				compile_c = true;
+				continue;
+			case 'd':
+				dynamic = true;
+				continue;
+			default:
+				break;
+		}
+
+		// if the argument didn't match any flags
+		fprintf(stderr, "error: invalid flag '%s'\nUse -h for help\n", arg);
+		return 1;
 	}
 
-	if ((interpret && compile_c) || (interpret && compile_asm)) {
-		fprintf(stderr, "error: can't have both the '-i' flag and a compilation flag at once\n");
+	if (interpret && (compile_c || compile_asm)) {
+		fprintf(stderr, "error: can't have both the '-int' flag and a compilation flag at once\n");
 		return 1;
 	}
 	else if (compile_c && compile_asm) {
@@ -73,55 +74,70 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	for (; i < argc; ++i) {
-		char *src = read_file(argv[i]);
+	if (!compile_c && !compile_asm)
+		interpret = true;
 
-		if (!(compile_c || compile_asm)) {
-			bfci_interpret(src);	
+	for (; i < argc; ++i) {
+		char *src = file_read(argv[i]);
+
+		if (interpret) {
+			bfci_interpret(src, dynamic);	
 			continue;
 		}
 
-		const char *file_name = argv[i];
-		uint32_t file_name_len = strlen(file_name);
-
-		int32_t extension_index; for (extension_index = file_name_len - 1; extension_index != -1 && file_name[extension_index] != '.'; --extension_index);
-		int32_t path_index;
-		for (path_index = file_name_len - 1; path_index != -1 && file_name[path_index] != '/'; --path_index);
-		++path_index;
-
 		char *compiled = NULL;
-		uint32_t out_name_offset; // for the sprintf offset
-		const char *extension_str = NULL;
+		const char *extension = NULL;
 
 		if (compile_c) {
-			compiled = bfci_compile_c(src);
-			extension_str = ".c";
+			compiled = bfci_compile_c(src, dynamic);
+			extension = ".c";
 		}
 		else if (compile_asm) {
-			compiled = bfci_compile_asm(src);
-			extension_str = ".asm";
+			compiled = bfci_compile_asm(src, dynamic);
+			extension = ".asm";
 		}
+		free(src);
 
-		if (extension_index == -1)
-			out_name_offset = file_name_len - 1;
-		else
-			out_name_offset = extension_index - path_index;
+		char *out_name = file_name_gen(argv[i], extension);
 
-		char *out_name = malloc(file_name_len - path_index + strlen(extension_str) + 1);
-		strcpy(out_name, file_name + path_index);
-		sprintf(out_name + out_name_offset, "%s", extension_str);
+		file_write(out_name, compiled);
 
-		write_file(out_name, compiled);
 		free(out_name);
 		free(compiled);
-		
-		free(src);
 	}
 
 	return 0;
 }
 
-static char *read_file(const char *name)
+static char *file_name_gen(const char *file_name, const char *extension)
+{
+	if (!file_name || !extension)
+		return NULL;
+
+	uint32_t file_name_len = strlen(file_name);
+
+	int32_t extension_index;
+	for (extension_index = file_name_len - 1; extension_index != -1 && file_name[extension_index] != '.'; --extension_index);
+
+	int32_t path_index;
+	for (path_index = file_name_len - 1; path_index != -1 && file_name[path_index] != '/'; --path_index);
+	++path_index;
+
+	uint32_t out_name_offset; // for the sprintf offset
+
+	if (extension_index == -1)
+		out_name_offset = file_name_len - 1;
+	else
+		out_name_offset = extension_index - path_index;
+
+	char *out_name = malloc(file_name_len - path_index + strlen(extension) + 1);
+	strcpy(out_name, file_name + path_index);
+	sprintf(out_name + out_name_offset, "%s", extension);
+
+	return out_name;
+}
+
+static char *file_read(const char *name)
 {
 	FILE *file = fopen(name, "r");
 	if (file == NULL) {
@@ -141,7 +157,7 @@ static char *read_file(const char *name)
 	return buffer;
 }
 
-static void write_file(const char *name, const char *src)
+static void file_write(const char *name, const char *src)
 {
 	FILE *file = fopen(name, "w+");
 	if (file == NULL) {
@@ -155,10 +171,13 @@ static void write_file(const char *name, const char *src)
 
 static void print_help(void)
 {
-	printf("Usage: bfci [options] files...\n"
-	       "Options:\n"
-	       "  -h   help\n"
-	       "  -i   interpret\n"
-	       "  -c   compile to C\n"
-		   "  -asm compile to Linux x86_64 Assembly\n");
+	printf(
+		"Usage: bfci [options] files...\n"
+		"Options:\n"
+		"  -h\thelp\n"
+		"  -int\tinterpret\n"
+		"  -c\tcompile to C\n"
+		"  -asm\tcompile to Linux x86_64 NASM Assembly\n"
+		"  -d\tdynamically allocated cells\n"
+	);
 }
