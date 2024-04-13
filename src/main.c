@@ -5,10 +5,9 @@
 #include <stdbool.h>
 
 #include "bfci.h"
+#include "util.h"
 
-static char *file_read(const char *name);
-static void file_write(const char *name, const char *src);
-
+// takes a file [file_name] (e.g. hello.bf) and changes the extension to [extension] (e.g. .asm)
 static char *file_name_gen(const char *file_name, const char *extension);
 
 static void print_help(void);
@@ -96,7 +95,6 @@ int main(int argc, char **argv)
 			compiled = bfci_compile_asm(src, dynamic);
 			extension = ".asm";
 		}
-		free(src);
 
 		char *out_name = file_name_gen(argv[i], extension);
 
@@ -135,38 +133,6 @@ static char *file_name_gen(const char *file_name, const char *extension)
 	sprintf(out_name + out_name_offset, "%s", extension);
 
 	return out_name;
-}
-
-static char *file_read(const char *name)
-{
-	FILE *file = fopen(name, "r");
-	if (file == NULL) {
-		fprintf(stderr, "error: %s: cannot open file\n", name);
-		exit(EXIT_FAILURE);
-	}
-
-	fseek(file, 0, SEEK_END);
-	size_t file_size = ftell(file);
-	fseek(file, 0, SEEK_SET);
-
-	char *buffer = malloc(file_size + 1);
-	fread(buffer, sizeof(char), file_size, file);
-
-	fclose(file);
-
-	return buffer;
-}
-
-static void file_write(const char *name, const char *src)
-{
-	FILE *file = fopen(name, "w+");
-	if (file == NULL) {
-		fprintf(stderr, "error: %s: cannot write to file\n", name);
-	}
-
-	fwrite(src, sizeof(char), strlen(src), file);
-
-	fclose(file);
 }
 
 static void print_help(void)
