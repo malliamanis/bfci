@@ -9,6 +9,9 @@
 #define CELLS_FIXED_SIZE 30000
 #define CELLS_FIXED_SIZE_STR "30000" 
 
+#define CELLS_INITIAL_DYNAMIC_SIZE 128
+#define CELLS_INITIAL_DYNAMIC_SIZE_STR "128"
+
 enum token_type {
 	TOKEN_LEFT,
 	TOKEN_RIGHT,
@@ -63,7 +66,7 @@ char *bfci_compile_c(char *src, bool dynamic)
 			"\n"
 			"int main(void)\n"
 			"{\n"
-			"\tsize_t size = 128;\n"
+			"\tsize_t size = " CELLS_INITIAL_DYNAMIC_SIZE_STR ";\n"
 			"\tuint8_t *cells = calloc(size, sizeof(uint8_t));\n"
 			"\tuint8_t *ptr = cells;\n"
 		);
@@ -86,46 +89,39 @@ char *bfci_compile_c(char *src, bool dynamic)
 	free(src);
 
 	while ((current = tokens[index++]).type != TOKEN_EOF) {
+		append_str(&output, &output_size, indentation);
+
 		switch (current.type) {
 			case TOKEN_LEFT:
-				append_str(&output, &output_size, indentation);
 				append_str(&output, &output_size, "\t--ptr;\n");
 				break;
 			case TOKEN_RIGHT:
-				if (dynamic) {
-					append_str(&output, &output_size, indentation);
+				if (dynamic)
 					append_str(&output, &output_size, "\tdouble_size(&cells, &ptr, &size);\n");
-				}
 
-				append_str(&output, &output_size, indentation);
 				append_str(&output, &output_size, "\t++ptr;\n");
 				break;
 			case TOKEN_INC:
-				append_str(&output, &output_size, indentation);
 				append_str(&output, &output_size, "\t++(*ptr);\n");
 				break;
 			case TOKEN_DEC:
-				append_str(&output, &output_size, indentation);
 				append_str(&output, &output_size, "\t--(*ptr);\n");
 				break;
 			case TOKEN_OUT:
-				append_str(&output, &output_size, indentation);
 				append_str(&output, &output_size, "\tputchar(*ptr);\n");
 				break;
 			case TOKEN_IN:
-				append_str(&output, &output_size, indentation);
 				append_str(&output, &output_size, "\t*ptr = getchar();\n");
 				break;
 			case TOKEN_JMP_FWD:
-				append_str(&output, &output_size, indentation);
 				append_str(&output, &output_size, "\twhile (*ptr) {\n");
 
 				indentation[indentation_last++] = '\t';
-				break;
+				continue;
 			case TOKEN_JMP_BACK:
+				output[strlen(output) - 1] = 0; // the closing '}' of a loop is indented one tab less than the body 
 				indentation[--indentation_last] = 0;
 
-				append_str(&output, &output_size, indentation);
 				append_str(&output, &output_size, "\t}\n");
 				break;
 			default:
@@ -171,14 +167,12 @@ char *bfci_compile_asm(char *src, bool dynamic)
 		""
 		"section .text\n"
 		"brk:\n"
-		" mov eax, 12\n"
+		" mov rax, 12\n"
 		" syscall\n"
 		" ret\n"
 	);
 
 	if (dynamic) {
-		fprintf(stderr, "warning: dynamic memory for assembly doesn't work properly(yet), omit the '-d' option if you don't want undefined behaviour\n");
-
 		append_str(
 			&output,
 			&output_size,
@@ -187,24 +181,26 @@ char *bfci_compile_asm(char *src, bool dynamic)
 			" mov rcx, qword [cells]\n"
 			" sub rax, rcx\n"
 			" mov rbx, qword [size]\n"
-			" dec rbx\n"
+			" inc rax\n"
 			" cmp rax, rbx\n"
 			""
-			" jne ENDIF\n"
-			" lea rbx, [size]\n"
-			" mov rdi, qword [rbx]\n"
-			" shl rdi, 1\n"
+			" jne D_DONT_RESIZE\n"
+			" mov rdi, rbx\n"
+			" add rdi, rdi\n"
 			" call brk\n"
 			""
-			" mov rdx, qword [cells]\n"
-			" add rdx, qword [rbx]\n"
-			" xor rax, rax\n"
-			" mov rdi, qword [rbx]\n"
-			" dec rdi\n"
-			" rep stosb\n"
+			" mov rax, qword [cells]\n"
+			" add rax, rbx\n"
+			" mov rdi, rbx\n"
+			" add rdi, rdi\n"
+			"D_LOOP_START:\n"
+			" cmp rbx, rdi\n"
+			" je D_LOOP_END\n"
+			" mov byte [rax], 0\n"
+			"D_LOOP_END:\n"
 			""
-			" shl qword [rbx], 1\n"
-			" ENDIF:\n"
+			" add qword [size], rbx\n"
+			"D_DONT_RESIZE:\n"
 			" ret\n"
 		);
 	}
@@ -213,18 +209,18 @@ char *bfci_compile_asm(char *src, bool dynamic)
 		&output,
 		&output_size,
 		"O:\n" // output a byte
-		" mov eax, 1\n"
-		" mov edi, 1\n"
-		" mov rsi, [pointer]\n"
-		" mov edx, 1\n"
+		" mov rax, 1\n"
+		" mov rdi, 1\n"
+		" mov rsi, qword [pointer]\n"
+		" mov rdx, 1\n"
 		" syscall\n"
 		" ret\n"
 		""
 		"G:\n" // get a byte from the user
-		" xor eax, eax\n"
-		" xor edi, edi\n"
+		" xor rax, rax\n"
+		" xor rdi, rdi\n"
 		" mov rsi, qword [pointer]\n"
-		" mov edx, 1\n"
+		" mov rdx, 1\n"
 		" syscall\n"
 		" ret\n"
 		""
@@ -232,16 +228,33 @@ char *bfci_compile_asm(char *src, bool dynamic)
 		" push rbp\n"
 		" mov rbp, rsp\n"
 		""
-		" xor edi, edi\n"
+		" xor rdi, rdi\n"
 		" call brk\n"
 		" mov qword [cells], rax\n"
 		" mov qword [pointer], rax\n"
 		" mov rdi, rax\n"
-		" mov qword [size], " CELLS_FIXED_SIZE_STR "\n"
-		" mov eax, [size]\n"
-		" add rdi, rax\n"
-		" call brk\n"
 	);
+
+	if (dynamic) {
+		append_str(
+			&output,
+			&output_size,
+			" mov qword [size], " CELLS_INITIAL_DYNAMIC_SIZE_STR "\n"
+			" mov rax, qword [size]\n"
+			" add rdi, rax\n"
+			" call brk\n"
+		);
+	}
+	else {
+		append_str(
+			&output,
+			&output_size,
+			" mov qword [size], " CELLS_FIXED_SIZE_STR "\n"
+			" mov rax, qword [size]\n"
+			" add rdi, rax\n"
+			" call brk\n"
+		);
+	}
 
 	uint32_t index = 0;
 	struct token current;
@@ -291,7 +304,7 @@ char *bfci_compile_asm(char *src, bool dynamic)
 				append_str(&output, &output_size, startstr);
 				append_str(
 					&output, &output_size,
-					" mov rax, [pointer]\n"
+					" mov rax, qword [pointer]\n"
 					" cmp byte [rax], 0\n"
 					" je "
 				);
@@ -308,7 +321,7 @@ char *bfci_compile_asm(char *src, bool dynamic)
 				append_str(
 					&output,
 					&output_size,
-					" mov rax, [pointer]\n"
+					" mov rax, qword [pointer]\n"
 					" cmp byte [rax], 0\n"
 					" jne "
 				);
@@ -325,13 +338,13 @@ char *bfci_compile_asm(char *src, bool dynamic)
 	append_str(
 		&output,
 		&output_size,
-		" mov rax, [cells]\n"
+		" mov rax, qword [cells]\n"
 		" call brk\n"
 		""
 		" pop rbp\n"
 		""
 		" mov rax, 60\n"
-		" mov rdi, 0\n"
+		" xor rdi, rdi\n"
 		" syscall\n"
 	);
 
@@ -346,7 +359,7 @@ void bfci_interpret(char *src, bool dynamic)
 	size_t cells_size;
 
 	if (dynamic)
-		cells_size = 128;
+		cells_size = CELLS_INITIAL_DYNAMIC_SIZE;
 	else
 		cells_size = CELLS_FIXED_SIZE;
 	cells = calloc(cells_size, sizeof *cells);
@@ -369,7 +382,7 @@ void bfci_interpret(char *src, bool dynamic)
 				--ptr;
 				break;
 			case TOKEN_RIGHT:
-				if ((uintptr_t)(ptr - cells) == cells_size/* - 1*/) {
+				if ((uintptr_t)(ptr - cells) == cells_size - 1) {
 					if (dynamic) {
 						ptr -= (uintptr_t)cells;
 
@@ -480,4 +493,3 @@ static struct token *tokenise(const char *src)
 
 	return tokens;
 }
-
