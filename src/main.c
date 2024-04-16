@@ -68,6 +68,10 @@ int main(int argc, char **argv)
 		fprintf(stderr, "error: can't have both the '-c' and '-asm' options at once\n");
 		return 1;
 	}
+	else if (compile_asm && dynamic) {
+		fprintf(stderr, "error: dynamic memory isn't supported for compilation with assembly\n");
+		return 1;
+	}
 	else if (i == argc) {
 		fprintf(stderr, "error: no input files\n");
 		return 1;
@@ -92,7 +96,7 @@ int main(int argc, char **argv)
 			extension = ".c";
 		}
 		else if (compile_asm) {
-			compiled = bfci_compile_asm(src, dynamic);
+			compiled = bfci_compile_asm(src);
 			extension = ".asm";
 		}
 

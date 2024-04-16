@@ -7,7 +7,7 @@
 
 // both return a heap allocated string
 char *bfci_compile_c(char *src, bool dynamic);
-char *bfci_compile_asm(char *src, bool dynamic);
+char *bfci_compile_asm(char *src);
 
 void bfci_interpret(char *src, bool dynamic);
 

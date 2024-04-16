@@ -141,7 +141,7 @@ char *bfci_compile_c(char *src, bool dynamic)
 	return output;
 }
 
-char *bfci_compile_asm(char *src, bool dynamic)
+char *bfci_compile_asm(char *src)
 {
 	size_t output_size = 512;
 	char *output = calloc(output_size, sizeof(char));
@@ -171,39 +171,6 @@ char *bfci_compile_asm(char *src, bool dynamic)
 		" syscall\n"
 		" ret\n"
 	);
-
-	if (dynamic) {
-		append_str(
-			&output,
-			&output_size,
-			"D:\n" // double memory size if needed
-			" mov rax, qword [pointer]\n"
-			" mov rcx, qword [cells]\n"
-			" sub rax, rcx\n"
-			" mov rbx, qword [size]\n"
-			" inc rax\n"
-			" cmp rax, rbx\n"
-			""
-			" jne D_DONT_RESIZE\n"
-			" mov rdi, rbx\n"
-			" add rdi, rdi\n"
-			" call brk\n"
-			""
-			" mov rax, qword [cells]\n"
-			" add rax, rbx\n"
-			" mov rdi, rbx\n"
-			" add rdi, rdi\n"
-			"D_LOOP_START:\n"
-			" cmp rbx, rdi\n"
-			" je D_LOOP_END\n"
-			" mov byte [rax], 0\n"
-			"D_LOOP_END:\n"
-			""
-			" add qword [size], rbx\n"
-			"D_DONT_RESIZE:\n"
-			" ret\n"
-		);
-	}
 
 	append_str(
 		&output,
@@ -235,26 +202,14 @@ char *bfci_compile_asm(char *src, bool dynamic)
 		" mov rdi, rax\n"
 	);
 
-	if (dynamic) {
-		append_str(
-			&output,
-			&output_size,
-			" mov qword [size], " CELLS_INITIAL_DYNAMIC_SIZE_STR "\n"
-			" mov rax, qword [size]\n"
-			" add rdi, rax\n"
-			" call brk\n"
-		);
-	}
-	else {
-		append_str(
-			&output,
-			&output_size,
-			" mov qword [size], " CELLS_FIXED_SIZE_STR "\n"
-			" mov rax, qword [size]\n"
-			" add rdi, rax\n"
-			" call brk\n"
-		);
-	}
+	append_str(
+		&output,
+		&output_size,
+		" mov qword [size], " CELLS_FIXED_SIZE_STR "\n"
+		" mov rax, qword [size]\n"
+		" add rdi, rax\n"
+		" call brk\n"
+	);
 
 	uint32_t index = 0;
 	struct token current;
@@ -268,8 +223,6 @@ char *bfci_compile_asm(char *src, bool dynamic)
 				break;
 			case TOKEN_RIGHT:
 				append_str(&output, &output_size, " inc qword [pointer]\n");
-				if (dynamic)
-					append_str(&output, &output_size, " call D\n");
 				break;
 			case TOKEN_INC:
 				append_str(
