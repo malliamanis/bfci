@@ -12,26 +12,58 @@
 #define CELLS_INITIAL_DYNAMIC_SIZE 128
 #define CELLS_INITIAL_DYNAMIC_SIZE_STR "128"
 
-enum token_type {
-	TOKEN_LEFT,
-	TOKEN_RIGHT,
-	TOKEN_INC,
-	TOKEN_DEC,
-	TOKEN_IN,
-	TOKEN_OUT,
-	TOKEN_JMP_FWD,
-	TOKEN_JMP_BACK,
-	TOKEN_EOF
+enum operation_type {
+	OPERATION_LEFT,
+	OPERATION_RIGHT,
+	OPERATION_INC,
+	OPERATION_DEC,
+	OPERATION_IN,
+	OPERATION_OUT,
+	OPERATION_JMP_FWD,
+	OPERATION_JMP_BACK,
+	OPERATION_EOF
 };
 
-struct token {
-	enum token_type type;
-	uint32_t jump_matching_index;
+struct operation {
+	enum operation_type operator;
+	uint32_t operand;
 };
 
-static struct token *tokenise(const char *src);
+// TODO: add optimisation
+static struct operation *compile_generic(const char *src, bool optimise);
 
-char *bfci_compile_c(char *src, bool dynamic)
+static void  interpret(const struct operation *ops, bool dynamic);
+static char *compile_c(const struct operation *ops, bool dynamic);
+static char *compile_asm(const struct operation *ops);
+
+char *bfci_ci(char *src, enum bfci_option option, bool optimise, bool dynamic)
+{
+	struct operation *ops = compile_generic(src, optimise);
+	free(src);
+
+	if (option == BFCI_INTERPRET) {
+		interpret(ops, dynamic);
+		return NULL;
+	}
+
+	char *output = NULL;
+	if (option == BFCI_COMPILE_C)
+		output = compile_c(ops, dynamic);
+	else if (option == BFCI_COMPILE_ASM) {
+		if (dynamic) {
+			fprintf(stderr, "error: dynamic memory isn't supported for assembly\n");
+			exit(EXIT_FAILURE);
+		}
+
+		output = compile_asm(ops);
+	}
+
+	free(ops);
+
+	return output;
+}
+
+static char *compile_c(const struct operation *ops, bool dynamic)
 {
 	size_t output_size = 64;
 	char *output = calloc(output_size, sizeof(char));
@@ -84,41 +116,39 @@ char *bfci_compile_c(char *src, bool dynamic)
 	}
 
 	uint32_t index = 0;
-	struct token current;
-	struct token *tokens = tokenise(src);
-	free(src);
+	struct operation current;
 
-	while ((current = tokens[index++]).type != TOKEN_EOF) {
+	while ((current = ops[index++]).operator != OPERATION_EOF) {
 		append_str(&output, &output_size, indentation);
 
-		switch (current.type) {
-			case TOKEN_LEFT:
+		switch (current.operator) {
+			case OPERATION_LEFT:
 				append_str(&output, &output_size, "\t--ptr;\n");
 				break;
-			case TOKEN_RIGHT:
+			case OPERATION_RIGHT:
 				if (dynamic)
 					append_str(&output, &output_size, "\tdouble_size(&cells, &ptr, &size);\n");
 
 				append_str(&output, &output_size, "\t++ptr;\n");
 				break;
-			case TOKEN_INC:
+			case OPERATION_INC:
 				append_str(&output, &output_size, "\t++(*ptr);\n");
 				break;
-			case TOKEN_DEC:
+			case OPERATION_DEC:
 				append_str(&output, &output_size, "\t--(*ptr);\n");
 				break;
-			case TOKEN_OUT:
+			case OPERATION_OUT:
 				append_str(&output, &output_size, "\tputchar(*ptr);\n");
 				break;
-			case TOKEN_IN:
+			case OPERATION_IN:
 				append_str(&output, &output_size, "\t*ptr = getchar();\n");
 				break;
-			case TOKEN_JMP_FWD:
+			case OPERATION_JMP_FWD:
 				append_str(&output, &output_size, "\twhile (*ptr) {\n");
 
 				indentation[indentation_last++] = '\t';
 				continue;
-			case TOKEN_JMP_BACK:
+			case OPERATION_JMP_BACK:
 				output[strlen(output) - 1] = 0; // the closing '}' of a loop is indented one tab less than the body 
 				indentation[--indentation_last] = 0;
 
@@ -129,8 +159,6 @@ char *bfci_compile_c(char *src, bool dynamic)
 		}
 	}
 
-	free (tokens);
-	
 	append_str(
 		&output,
 		&output_size,
@@ -141,7 +169,7 @@ char *bfci_compile_c(char *src, bool dynamic)
 	return output;
 }
 
-char *bfci_compile_asm(char *src)
+static char *compile_asm(const struct operation *ops)
 {
 	size_t output_size = 512;
 	char *output = calloc(output_size, sizeof(char));
@@ -192,35 +220,29 @@ char *bfci_compile_asm(char *src)
 	);
 
 	uint32_t index = 0;
-	struct token current;
-	struct token *tokens = tokenise(src);
-	free(src);
+	struct operation current;
 
-	while ((current = tokens[index++]).type != TOKEN_EOF) {
-		switch (current.type) {
-			case TOKEN_LEFT:
+	while ((current = ops[index++]).operator != OPERATION_EOF) {
+		switch (current.operator) {
+			case OPERATION_LEFT:
 				append_str(&output, &output_size, " dec rbx\n");
 				break;
-			case TOKEN_RIGHT:
+			case OPERATION_RIGHT:
 				append_str(&output, &output_size, " inc rbx\n");
 				break;
-			case TOKEN_INC:
+			case OPERATION_INC:
 				append_str(&output, &output_size, " inc byte [rbx]\n");
 				break;
-			case TOKEN_DEC:
-				append_str(
-					&output,
-					&output_size,
-					" dec byte [rbx]\n"
-				);
+			case OPERATION_DEC:
+				append_str(&output, &output_size, " dec byte [rbx]\n");
 				break;
-			case TOKEN_OUT:
+			case OPERATION_OUT:
 				append_str(&output, &output_size, " call O\n");
 				break;
-			case TOKEN_IN:
+			case OPERATION_IN:
 				append_str(&output, &output_size, " call G\n");
 				break;
-			case TOKEN_JMP_FWD:
+			case OPERATION_JMP_FWD:
 				stack_push(&loop_stack, loop_counter);
 
 				sprintf(startstr, "L%u:\n", loop_counter);
@@ -237,7 +259,7 @@ char *bfci_compile_asm(char *src)
 				append_str(&output, &output_size, endstr);
 
 				break;
-			case TOKEN_JMP_BACK:
+			case OPERATION_JMP_BACK:
 				temp = stack_pop(&loop_stack);
 
 				sprintf(endstr, "E%u:\n", temp);
@@ -258,8 +280,6 @@ char *bfci_compile_asm(char *src)
 		}
 	}
 
-	free(tokens);
-	
 	append_str(
 		&output,
 		&output_size,
@@ -275,7 +295,7 @@ char *bfci_compile_asm(char *src)
 	return output;
 }
 
-void bfci_interpret(char *src, bool dynamic)
+static void interpret(const struct operation *ops, bool dynamic)
 {
 	uint8_t *cells;
 	size_t cells_size;
@@ -288,14 +308,12 @@ void bfci_interpret(char *src, bool dynamic)
 
 	uint8_t *ptr = cells;
 
-	struct token current;
-	struct token *tokens = tokenise(src);
-	free(src);
-
 	uint32_t pg_counter = 0;
-	while ((current = tokens[pg_counter]).type != TOKEN_EOF) {
-		switch (current.type) {
-			case TOKEN_LEFT:
+	struct operation current;
+
+	while ((current = ops[pg_counter]).operator != OPERATION_EOF) {
+		switch (current.operator) {
+			case OPERATION_LEFT:
 				if (ptr == cells) {
 					fprintf(stderr, "error: data pointer below 0\n");
 					exit(EXIT_FAILURE);
@@ -303,7 +321,7 @@ void bfci_interpret(char *src, bool dynamic)
 
 				--ptr;
 				break;
-			case TOKEN_RIGHT:
+			case OPERATION_RIGHT:
 				if ((uintptr_t)(ptr - cells) == cells_size - 1) {
 					if (dynamic) {
 						ptr -= (uintptr_t)cells;
@@ -322,26 +340,26 @@ void bfci_interpret(char *src, bool dynamic)
 
 				++ptr;
 				break;
-			case TOKEN_INC:
+			case OPERATION_INC:
 				++(*ptr);
 				break;
-			case TOKEN_DEC:
+			case OPERATION_DEC:
 				--(*ptr);
 				break;
-			case TOKEN_OUT:
+			case OPERATION_OUT:
 				putchar(*ptr);
 				break;
-			case TOKEN_IN:
+			case OPERATION_IN:
 				*ptr = getchar();
 				break;
-			case TOKEN_JMP_FWD:
+			case OPERATION_JMP_FWD:
 				if (*ptr == 0)
-					pg_counter = current.jump_matching_index;
+					pg_counter = current.operand;
 
 				break;
-			case TOKEN_JMP_BACK:
+			case OPERATION_JMP_BACK:
 				if (*ptr != 0)
-					pg_counter = current.jump_matching_index;
+					pg_counter = current.operand;
 				break;
 			default:
 				break;
@@ -350,15 +368,14 @@ void bfci_interpret(char *src, bool dynamic)
 		++pg_counter;
 	}
 
-	free(tokens);
 	free(cells);	
 }
 
-static struct token *tokenise(const char *src)
+static struct operation *compile_generic(const char *src, bool optimise)
 {
-	size_t tokens_size = 32;
-	uint32_t tokens_index = 0;
-	struct token *tokens = malloc(tokens_size * (sizeof *tokens));
+	size_t ops_size = 32;
+	uint32_t inst_index = 0;
+	struct operation *ops = malloc(ops_size * (sizeof *ops));
 
 	uint32_t pop;
 	struct stack jump_stack = stack_create(32);
@@ -367,51 +384,51 @@ static struct token *tokenise(const char *src)
 	for (uint32_t i = 0; (current = src[i]) != 0; ++i) {
 		switch (current) {
 			case '<':
-				tokens[tokens_index].type = TOKEN_LEFT;
+				ops[inst_index].operator = OPERATION_LEFT;
 				break;
 			case '>':
-				tokens[tokens_index].type = TOKEN_RIGHT;
+				ops[inst_index].operator = OPERATION_RIGHT;
 				break;
 			case '+':
-				tokens[tokens_index].type = TOKEN_INC;
+				ops[inst_index].operator = OPERATION_INC;
 				break;
 			case '-':
-				tokens[tokens_index].type = TOKEN_DEC;
+				ops[inst_index].operator = OPERATION_DEC;
 				break;
 			case '.':
-				tokens[tokens_index].type = TOKEN_OUT;
+				ops[inst_index].operator = OPERATION_OUT;
 				break;
 			case ',':
-				tokens[tokens_index].type = TOKEN_IN;
+				ops[inst_index].operator = OPERATION_IN;
 				break;
 			case '[':
-				stack_push(&jump_stack, tokens_index);
-				tokens[tokens_index].type = TOKEN_JMP_FWD;
+				stack_push(&jump_stack, inst_index);
+				ops[inst_index].operator = OPERATION_JMP_FWD;
 				break;
 			case ']':
 				pop = stack_pop(&jump_stack);
 
 				// I think it's self explanatory
-				tokens[tokens_index].type = TOKEN_JMP_BACK;
-				tokens[tokens_index].jump_matching_index = pop;
-				tokens[pop].jump_matching_index = tokens_index;
+				ops[inst_index].operator = OPERATION_JMP_BACK;
+				ops[inst_index].operand = pop;
+				ops[pop].operand = inst_index;
 				break;
 			default:
-				// if current doesn't match a token then don't try to double the size of tokens
-				// also don't increment the tokens_index
+				// if current doesn't match a operation then don't try to double the size of ops
+				// also don't increment the inst_index
 				continue;
 		}
 
-		++tokens_index;
+		++inst_index;
 
-		if (tokens_index == tokens_size)
-			tokens = realloc(tokens, (tokens_size *= 2) * (sizeof *tokens));
+		if (inst_index == ops_size)
+			ops = realloc(ops, (ops_size *= 2) * (sizeof *ops));
 	}
 
 	stack_destroy(&jump_stack);
 
-	tokens[tokens_index++].type = TOKEN_EOF;
-	tokens = realloc(tokens, tokens_index * (sizeof *tokens));
+	ops[inst_index++].operator = OPERATION_EOF;
+	ops = realloc(ops, inst_index * (sizeof *ops));
 
-	return tokens;
+	return ops;
 }

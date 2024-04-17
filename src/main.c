@@ -19,9 +19,8 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	bool interpret = false;
-	bool compile_c = false;
-	bool compile_asm = false;
+	enum bfci_option option = BFCI_INTERPRET;
+	bool optimise = false;
 	bool dynamic = false;
 
 	int i;
@@ -33,11 +32,11 @@ int main(int argc, char **argv)
 			break;
 
 		if (strcmp(arg + 1, "int") == 0) {
-			interpret = true;
+			option = BFCI_INTERPRET;
 			continue;
 		}
 		else if (strcmp(arg + 1, "asm") == 0) {
-			compile_asm = true;
+			option = BFCI_COMPILE_ASM;
 			continue;
 		}
 
@@ -46,7 +45,10 @@ int main(int argc, char **argv)
 				print_help();
 				return 0;
 			case 'c':
-				compile_c = true;
+				option = BFCI_COMPILE_C;
+				continue;
+			case 'o':
+				option = true;
 				continue;
 			case 'd':
 				dynamic = true;
@@ -60,44 +62,21 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	if (interpret && (compile_c || compile_asm)) {
-		fprintf(stderr, "error: can't have both the '-int' flag and a compilation flag at once\n");
-		return 1;
-	}
-	else if (compile_c && compile_asm) {
-		fprintf(stderr, "error: can't have both the '-c' and '-asm' options at once\n");
-		return 1;
-	}
-	else if (compile_asm && dynamic) {
-		fprintf(stderr, "error: dynamic memory isn't supported for compilation with assembly\n");
-		return 1;
-	}
-	else if (i == argc) {
+	if (i == argc) {
 		fprintf(stderr, "error: no input files\n");
 		return 1;
 	}
 
-	if (!compile_c && !compile_asm)
-		interpret = true;
-
 	for (; i < argc; ++i) {
 		char *src = file_read(argv[i]);
 
-		if (interpret) {
-			bfci_interpret(src, dynamic);	
-			continue;
-		}
+		char *compiled = bfci_ci(src, option, optimise, dynamic);
 
-		char *compiled = NULL;
 		const char *extension = NULL;
-
-		if (compile_c) {
-			compiled = bfci_compile_c(src, dynamic);
-			extension = ".c";
-		}
-		else if (compile_asm) {
-			compiled = bfci_compile_asm(src);
-			extension = ".asm";
+		switch (option) {
+			case BFCI_INTERPRET: continue;
+			case BFCI_COMPILE_C: extension = ".c";
+			case BFCI_COMPILE_ASM: extension = ".asm";
 		}
 
 		char *out_name = file_name_gen(argv[i], extension);
@@ -148,6 +127,7 @@ static void print_help(void)
 		"  -int\tinterpret\n"
 		"  -c\tcompile to C\n"
 		"  -asm\tcompile to Linux x86_64 NASM Assembly\n"
+		"  -o\tturn on optimisations"
 		"  -d\tdynamically allocated cells\n"
 	);
 }

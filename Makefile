@@ -9,7 +9,7 @@ LD = zig cc
 
 CFLAGS = -std=c11 -pedantic -Wall -Wextra -Wfloat-equal -Wundef -Wshadow -Wpointer-arith -Wcast-align -Wunreachable-code -Isrc
 
-CFLAGS_DEB = -O0 -g -gdwarf-4
+CFLAGS_DEB = -O0 -ggdb -gdwarf-4
 CFLAGS_REL = -O3
 
 LDFLAGS =
