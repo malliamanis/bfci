@@ -161,15 +161,9 @@ char *bfci_compile_asm(char *src)
 		"global _start\n"
 		""
 		"section .bss\n"
-		"cells: resq 1\n"
-		"pointer: resq 1\n"
-		"size: resq 1\n"
+		"cells: resq " CELLS_FIXED_SIZE_STR "\n"
 		""
 		"section .text\n"
-		"brk:\n"
-		" mov rax, 12\n"
-		" syscall\n"
-		" ret\n"
 	);
 
 	append_str(
@@ -178,7 +172,7 @@ char *bfci_compile_asm(char *src)
 		"O:\n" // output a byte
 		" mov rax, 1\n"
 		" mov rdi, 1\n"
-		" mov rsi, qword [pointer]\n"
+		" mov rsi, rbx\n"
 		" mov rdx, 1\n"
 		" syscall\n"
 		" ret\n"
@@ -186,7 +180,7 @@ char *bfci_compile_asm(char *src)
 		"G:\n" // get a byte from the user
 		" xor rax, rax\n"
 		" xor rdi, rdi\n"
-		" mov rsi, qword [pointer]\n"
+		" mov rsi, rbx\n"
 		" mov rdx, 1\n"
 		" syscall\n"
 		" ret\n"
@@ -194,21 +188,7 @@ char *bfci_compile_asm(char *src)
 		"_start:\n"
 		" push rbp\n"
 		" mov rbp, rsp\n"
-		""
-		" xor rdi, rdi\n"
-		" call brk\n"
-		" mov qword [cells], rax\n"
-		" mov qword [pointer], rax\n"
-		" mov rdi, rax\n"
-	);
-
-	append_str(
-		&output,
-		&output_size,
-		" mov qword [size], " CELLS_FIXED_SIZE_STR "\n"
-		" mov rax, qword [size]\n"
-		" add rdi, rax\n"
-		" call brk\n"
+		" lea rbx, [cells]\n" // rbx is the data pointer
 	);
 
 	uint32_t index = 0;
@@ -219,25 +199,19 @@ char *bfci_compile_asm(char *src)
 	while ((current = tokens[index++]).type != TOKEN_EOF) {
 		switch (current.type) {
 			case TOKEN_LEFT:
-				append_str(&output, &output_size, " dec qword [pointer]\n");
+				append_str(&output, &output_size, " dec rbx\n");
 				break;
 			case TOKEN_RIGHT:
-				append_str(&output, &output_size, " inc qword [pointer]\n");
+				append_str(&output, &output_size, " inc rbx\n");
 				break;
 			case TOKEN_INC:
-				append_str(
-					&output,
-					&output_size,
-					" mov rax, qword [pointer]\n"
-					" inc byte [rax]\n"
-				);
+				append_str(&output, &output_size, " inc byte [rbx]\n");
 				break;
 			case TOKEN_DEC:
 				append_str(
 					&output,
 					&output_size,
-					" mov rax, qword [pointer]\n"
-					" dec byte [rax]\n"
+					" dec byte [rbx]\n"
 				);
 				break;
 			case TOKEN_OUT:
@@ -257,8 +231,7 @@ char *bfci_compile_asm(char *src)
 				append_str(&output, &output_size, startstr);
 				append_str(
 					&output, &output_size,
-					" mov rax, qword [pointer]\n"
-					" cmp byte [rax], 0\n"
+					" cmp byte [rbx], 0\n"
 					" je "
 				);
 				append_str(&output, &output_size, endstr);
@@ -274,8 +247,7 @@ char *bfci_compile_asm(char *src)
 				append_str(
 					&output,
 					&output_size,
-					" mov rax, qword [pointer]\n"
-					" cmp byte [rax], 0\n"
+					" cmp byte [rbx], 0\n"
 					" jne "
 				);
 				append_str(&output, &output_size, startstr);
@@ -291,9 +263,6 @@ char *bfci_compile_asm(char *src)
 	append_str(
 		&output,
 		&output_size,
-		" mov rax, qword [cells]\n"
-		" call brk\n"
-		""
 		" pop rbp\n"
 		""
 		" mov rax, 60\n"
