@@ -4,10 +4,10 @@ CYAN   = \033[1;36m
 GREEN  = \033[1;32m
 YELLOW = \033[1;33m
 
-CC = zig cc
-LD = zig cc
+CC = clang
+LD = clang
 
-CFLAGS = -std=c11 -pedantic -Wall -Wextra -Wfloat-equal -Wundef -Wshadow -Wpointer-arith -Wcast-align -Wunreachable-code -Isrc
+CFLAGS = -std=c2x -pedantic -Wall -Wextra -Wfloat-equal -Wundef -Wshadow -Wpointer-arith -Wcast-align -Wunreachable-code -Isrc
 
 CFLAGS_DEB = -O0 -ggdb -gdwarf-4
 CFLAGS_REL = -O3

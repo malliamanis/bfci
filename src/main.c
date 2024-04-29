@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <stdbool.h>
 
 #include "bfci.h"
 #include "util.h"
@@ -15,13 +14,11 @@ static void print_help(void);
 int main(int argc, char **argv)
 {
 	if (argc < 2) {
-		print_help();
+		fprintf(stderr, "error: no arguments, use -h for help\n");
 		return 1;
 	}
 
-	enum bfci_option option = BFCI_INTERPRET;
-	bool optimise = false;
-	bool dynamic = false;
+	struct bfci_options options = (struct bfci_options) { .type = BFCI_INTERPRET };
 
 	int i;
 	for (i = 1; i < argc; ++i) {
@@ -31,35 +28,29 @@ int main(int argc, char **argv)
 		if (arg[0] != '-')
 			break;
 
-		if (strcmp(arg + 1, "int") == 0) {
-			option = BFCI_INTERPRET;
-			continue;
+		if (strcmp(arg, "-h") == 0) {
+			print_help();
+			return 0;
 		}
-		else if (strcmp(arg + 1, "asm") == 0) {
-			option = BFCI_COMPILE_ASM;
-			continue;
+		else if (strcmp(arg, "-int") == 0) {
+			options.type = BFCI_INTERPRET;
 		}
-
-		switch (arg[1]) {
-			case 'h':
-				print_help();
-				return 0;
-			case 'c':
-				option = BFCI_COMPILE_C;
-				continue;
-			case 'o':
-				option = true;
-				continue;
-			case 'd':
-				dynamic = true;
-				continue;
-			default:
-				break;
+		else if (strcmp(arg, "-c") == 0) {
+			options.type = BFCI_COMPILE_C;
 		}
-
-		// if the argument didn't match any flags
-		fprintf(stderr, "error: invalid flag '%s'\nUse -h for help\n", arg);
-		return 1;
+		else if (strcmp(arg, "-asm") == 0) {
+			options.type = BFCI_COMPILE_ASM;
+		}
+		else if (strcmp(arg, "-o") == 0) {
+			options.optimise = true;
+		}
+		else if (strcmp(arg, "-d") == 0) {
+			options.dynamic = true;
+		}
+		else {
+			fprintf(stderr, "error: invalid flag '%s'\nUse -h for help\n", arg);
+			return 1;
+		}
 	}
 
 	if (i == argc) {
@@ -70,13 +61,13 @@ int main(int argc, char **argv)
 	for (; i < argc; ++i) {
 		char *src = file_read(argv[i]);
 
-		char *compiled = bfci_ci(src, option, optimise, dynamic);
+		char *compiled = bfci_ci(src, options);
 
 		const char *extension = NULL;
-		switch (option) {
-			case BFCI_INTERPRET: continue;
-			case BFCI_COMPILE_C: extension = ".c";
-			case BFCI_COMPILE_ASM: extension = ".asm";
+		switch (options.type) {
+			case BFCI_INTERPRET:   continue;
+			case BFCI_COMPILE_C:   extension = ".c"; break;
+			case BFCI_COMPILE_ASM: extension = ".asm"; break;
 		}
 
 		char *out_name = file_name_gen(argv[i], extension);
@@ -127,7 +118,7 @@ static void print_help(void)
 		"  -int\tinterpret\n"
 		"  -c\tcompile to C\n"
 		"  -asm\tcompile to Linux x86_64 NASM Assembly\n"
-		"  -o\tturn on optimisations"
+		"  -o\tturn on optimisations\n"
 		"  -d\tdynamically allocated cells\n"
 	);
 }

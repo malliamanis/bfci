@@ -16,9 +16,9 @@ struct stack {
 	uint32_t top;
 };
 
-struct   stack stack_create(size_t initial_size);
-void     stack_push(struct stack *s, uint32_t value);
-uint32_t stack_pop(struct stack *s);
-void     stack_destroy(struct stack *s);
+struct stack stack_create(size_t initial_size);
+void         stack_push(struct stack *s, int32_t value);
+uint32_t     stack_pop(struct stack *s);
+void         stack_destroy(struct stack *s);
 
 #endif

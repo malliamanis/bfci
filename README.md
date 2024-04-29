@@ -1,5 +1,5 @@
 # BFCI
-Brainfuck Compiler and Interpreter
+Interprets and compiles Brainfuck to either C or x86_64 NASM Linux Assembly
 
 ---
 

@@ -12,6 +12,8 @@
 #define CELLS_INITIAL_DYNAMIC_SIZE 128
 #define CELLS_INITIAL_DYNAMIC_SIZE_STR "128"
 
+#define INVALID_OPERAND -1
+
 enum operation_type {
 	OPERATION_LEFT,
 	OPERATION_RIGHT,
@@ -19,14 +21,14 @@ enum operation_type {
 	OPERATION_DEC,
 	OPERATION_IN,
 	OPERATION_OUT,
-	OPERATION_JMP_FWD,
-	OPERATION_JMP_BACK,
+	OPERATION_JUMP_FWD,
+	OPERATION_JUMP_BACK,
 	OPERATION_EOF
 };
 
 struct operation {
 	enum operation_type operator;
-	uint32_t operand;
+	int32_t operand;
 };
 
 // TODO: add optimisation
@@ -36,26 +38,27 @@ static void  interpret(const struct operation *ops, bool dynamic);
 static char *compile_c(const struct operation *ops, bool dynamic);
 static char *compile_asm(const struct operation *ops);
 
-char *bfci_ci(char *src, enum bfci_option option, bool optimise, bool dynamic)
+char *bfci_ci(char *src, struct bfci_options options)
 {
-	struct operation *ops = compile_generic(src, optimise);
+	struct operation *ops = compile_generic(src, options.optimise);
 	free(src);
 
-	if (option == BFCI_INTERPRET) {
-		interpret(ops, dynamic);
-		return NULL;
-	}
-
 	char *output = NULL;
-	if (option == BFCI_COMPILE_C)
-		output = compile_c(ops, dynamic);
-	else if (option == BFCI_COMPILE_ASM) {
-		if (dynamic) {
-			fprintf(stderr, "error: dynamic memory isn't supported for assembly\n");
-			exit(EXIT_FAILURE);
-		}
+	switch (options.type) {
+		case BFCI_INTERPRET:
+			interpret(ops, options.dynamic);
+			return NULL;
+		case BFCI_COMPILE_C:
+			output = compile_c(ops, options.dynamic);
+			break;
+		case BFCI_COMPILE_ASM:
+			if (options.dynamic) {
+				fprintf(stderr, "error: dynamic memory isn't supported for assembly\n");
+				exit(EXIT_FAILURE);
+			}
 
-		output = compile_asm(ops);
+			output = compile_asm(ops);
+			break;
 	}
 
 	free(ops);
@@ -143,12 +146,12 @@ static char *compile_c(const struct operation *ops, bool dynamic)
 			case OPERATION_IN:
 				append_str(&output, &output_size, "\t*ptr = getchar();\n");
 				break;
-			case OPERATION_JMP_FWD:
+			case OPERATION_JUMP_FWD:
 				append_str(&output, &output_size, "\twhile (*ptr) {\n");
 
 				indentation[indentation_last++] = '\t';
 				continue;
-			case OPERATION_JMP_BACK:
+			case OPERATION_JUMP_BACK:
 				output[strlen(output) - 1] = 0; // the closing '}' of a loop is indented one tab less than the body 
 				indentation[--indentation_last] = 0;
 
@@ -242,7 +245,7 @@ static char *compile_asm(const struct operation *ops)
 			case OPERATION_IN:
 				append_str(&output, &output_size, " call G\n");
 				break;
-			case OPERATION_JMP_FWD:
+			case OPERATION_JUMP_FWD:
 				stack_push(&loop_stack, loop_counter);
 
 				sprintf(startstr, "L%u:\n", loop_counter);
@@ -259,7 +262,7 @@ static char *compile_asm(const struct operation *ops)
 				append_str(&output, &output_size, endstr);
 
 				break;
-			case OPERATION_JMP_BACK:
+			case OPERATION_JUMP_BACK:
 				temp = stack_pop(&loop_stack);
 
 				sprintf(endstr, "E%u:\n", temp);
@@ -308,10 +311,8 @@ static void interpret(const struct operation *ops, bool dynamic)
 
 	uint8_t *ptr = cells;
 
-	uint32_t pg_counter = 0;
 	struct operation current;
-
-	while ((current = ops[pg_counter]).operator != OPERATION_EOF) {
+	for (uint32_t pg_counter = 0; (current = ops[pg_counter]).operator != OPERATION_EOF; ++pg_counter) {
 		switch (current.operator) {
 			case OPERATION_LEFT:
 				if (ptr == cells) {
@@ -352,20 +353,23 @@ static void interpret(const struct operation *ops, bool dynamic)
 			case OPERATION_IN:
 				*ptr = getchar();
 				break;
-			case OPERATION_JMP_FWD:
+			case OPERATION_JUMP_FWD:
+				// TODO: add more insightful errors
+				if (current.operand == INVALID_OPERAND) {
+					fprintf(stderr, "error: '[' with no matching ']'\n");
+					exit(EXIT_FAILURE);
+				}
 				if (*ptr == 0)
 					pg_counter = current.operand;
 
 				break;
-			case OPERATION_JMP_BACK:
+			case OPERATION_JUMP_BACK:
 				if (*ptr != 0)
 					pg_counter = current.operand;
 				break;
 			default:
 				break;
 		}
-		
-		++pg_counter;
 	}
 
 	free(cells);	
@@ -374,7 +378,7 @@ static void interpret(const struct operation *ops, bool dynamic)
 static struct operation *compile_generic(const char *src, bool optimise)
 {
 	size_t ops_size = 32;
-	uint32_t inst_index = 0;
+	uint32_t index = 0;
 	struct operation *ops = malloc(ops_size * (sizeof *ops));
 
 	uint32_t pop;
@@ -384,51 +388,57 @@ static struct operation *compile_generic(const char *src, bool optimise)
 	for (uint32_t i = 0; (current = src[i]) != 0; ++i) {
 		switch (current) {
 			case '<':
-				ops[inst_index].operator = OPERATION_LEFT;
+				ops[index].operator = OPERATION_LEFT;
 				break;
 			case '>':
-				ops[inst_index].operator = OPERATION_RIGHT;
+				ops[index].operator = OPERATION_RIGHT;
 				break;
 			case '+':
-				ops[inst_index].operator = OPERATION_INC;
+				ops[index].operator = OPERATION_INC;
 				break;
 			case '-':
-				ops[inst_index].operator = OPERATION_DEC;
+				ops[index].operator = OPERATION_DEC;
 				break;
 			case '.':
-				ops[inst_index].operator = OPERATION_OUT;
+				ops[index].operator = OPERATION_OUT;
 				break;
 			case ',':
-				ops[inst_index].operator = OPERATION_IN;
+				ops[index].operator = OPERATION_IN;
 				break;
 			case '[':
-				stack_push(&jump_stack, inst_index);
-				ops[inst_index].operator = OPERATION_JMP_FWD;
+				stack_push(&jump_stack, index);
+
+				ops[index] = (struct operation) {
+					.operator = OPERATION_JUMP_FWD,
+					.operand = INVALID_OPERAND, // if invalid operand doesn't get overwritten that means that there's no matching ']'
+				};
 				break;
 			case ']':
 				pop = stack_pop(&jump_stack);
 
-				// I think it's self explanatory
-				ops[inst_index].operator = OPERATION_JMP_BACK;
-				ops[inst_index].operand = pop;
-				ops[pop].operand = inst_index;
+				ops[index] = (struct operation) {
+					.operator = OPERATION_JUMP_BACK,
+					.operand = pop
+				};
+
+				ops[pop].operand = index;
 				break;
 			default:
 				// if current doesn't match a operation then don't try to double the size of ops
-				// also don't increment the inst_index
+				// also don't increment the index
 				continue;
 		}
 
-		++inst_index;
+		++index;
 
-		if (inst_index == ops_size)
+		if (index == ops_size)
 			ops = realloc(ops, (ops_size *= 2) * (sizeof *ops));
 	}
 
 	stack_destroy(&jump_stack);
 
-	ops[inst_index++].operator = OPERATION_EOF;
-	ops = realloc(ops, inst_index * (sizeof *ops));
+	ops[index++].operator = OPERATION_EOF;
+	ops = realloc(ops, index * (sizeof *ops));
 
 	return ops;
 }
